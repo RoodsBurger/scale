@@ -17,9 +17,11 @@ Usage:
 import sys
 import time
 import argparse
+import os
 
-# Add hx711py to path
-sys.path.insert(0, '/Users/rodolfo/Documents/Personal Projects/scale/hx711py')
+# Add hx711py to path (relative to this script's location)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(script_dir, 'hx711py'))
 
 try:
     import RPi.GPIO as GPIO
