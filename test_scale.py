@@ -83,6 +83,64 @@ class ScaleTest:
             print(f"✗ Connection failed: {e}")
             return False
 
+    def test_reading_formats(self):
+        """Test different byte/bit format combinations."""
+        if EMULATOR_MODE:
+            print("Skipping format test in emulator mode")
+            return
+
+        print("\n" + "="*50)
+        print("TEST: Reading Format Detection")
+        print("="*50)
+        print("Testing all byte/bit format combinations...")
+        print()
+
+        formats = [
+            ("MSB", "MSB"),
+            ("MSB", "LSB"),
+            ("LSB", "MSB"),
+            ("LSB", "LSB"),
+        ]
+
+        best_format = None
+        best_variance = float('inf')
+        best_readings = []
+
+        for byte_fmt, bit_fmt in formats:
+            self.hx.setReadingFormat(byte_fmt, bit_fmt)
+            time.sleep(0.2)
+
+            readings = []
+            for _ in range(5):
+                val = self.hx.getLong()
+                readings.append(val)
+                time.sleep(0.05)
+
+            avg = sum(readings) / len(readings)
+            variance = max(readings) - min(readings)
+
+            # Check for suspicious power-of-2 patterns
+            suspicious = all(
+                (r & (r + 1)) == 0 or r == 0  # Check if r is 2^n - 1
+                for r in readings if r > 0
+            )
+
+            status = "⚠ SUSPICIOUS" if suspicious else ""
+            print(f"  {byte_fmt}/{bit_fmt}: avg={avg:>10.0f}  var={variance:>8}  {status}")
+            print(f"           readings: {readings}")
+
+            if not suspicious and variance < best_variance:
+                best_variance = variance
+                best_format = (byte_fmt, bit_fmt)
+                best_readings = readings
+
+        if best_format:
+            print(f"\n✓ Best format: {best_format[0]}/{best_format[1]}")
+            self.hx.setReadingFormat(best_format[0], best_format[1])
+        else:
+            print("\n⚠ All formats show suspicious patterns - check wiring")
+            self.hx.setReadingFormat("MSB", "MSB")
+
     def test_stability(self, num_readings=10):
         """Test reading stability by taking multiple samples."""
         print("\n" + "="*50)
@@ -99,9 +157,15 @@ class ScaleTest:
             if EMULATOR_MODE:
                 value = self.hx.get_weight(1)
             else:
-                value = self.hx.getLong()
-            readings.append(value)
-            print(f"  Reading {i+1}: {value}")
+                # Get raw bytes and show binary for debugging
+                raw_bytes = self.hx.getRawBytes()
+                value = self.hx.rawBytesToLong(raw_bytes)
+                if raw_bytes:
+                    binary = ''.join(f'{b:08b}' for b in raw_bytes)
+                    print(f"  Reading {i+1}: {value:>10}  (0x{raw_bytes[0]:02X}{raw_bytes[1]:02X}{raw_bytes[2]:02X} = {binary})")
+                else:
+                    print(f"  Reading {i+1}: {value}")
+            readings.append(value if value else 0)
             time.sleep(0.1)
 
         if readings:
@@ -116,8 +180,15 @@ class ScaleTest:
             print(f"Max:      {max_val}")
             print(f"Variance: {variance}")
 
+            # Check for power-of-2-minus-1 pattern (indicates bit issues)
+            suspicious_count = sum(1 for r in readings if r > 0 and (r & (r + 1)) == 0)
+            if suspicious_count > len(readings) // 2:
+                print("\n⚠ WARNING: Values are mostly 2^n-1 patterns (511, 1023, 2047...)")
+                print("  This suggests timing/wiring issues, not normal noise.")
+                print("  Try: check connections, use shorter wires, or try the v0.1 library")
+
             # Check if variance is reasonable (less than 5% of average)
-            if avg != 0 and abs(variance / avg) < 0.05:
+            elif avg != 0 and abs(variance / avg) < 0.05:
                 print("✓ Readings are stable!")
             else:
                 print("⚠ Readings show some variance (this may be normal)")
@@ -224,6 +295,9 @@ class ScaleTest:
         # Test connection
         if not self.test_connection():
             return False
+
+        # Test reading formats
+        self.test_reading_formats()
 
         # Test stability
         self.test_stability()
