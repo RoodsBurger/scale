@@ -1,28 +1,25 @@
 # scale
 
-HX711 + load-cell digital scale running on a Raspberry Pi (tested on Pi Zero). Several implementations were tried because the off-the-shelf `hx711py` library has timing issues on low-power Pis; the one that actually works (`scale.py`) talks to the HX711 via raw GPIO bit-banging — no library dependency.
+A digital scale built around an HX711 load-cell amplifier and a Raspberry Pi Zero. The challenge was that the Pi Zero's scheduler isn't tight enough for the off-the-shelf `hx711py` library — reads come back corrupted because the clock pulses get stretched. Half the files here are me figuring that out; the one that actually works is `scale.py`, which talks to the HX711 with raw `GPIO.output()` calls and no `sleep()` between edges.
 
-## Hardware
+## Wiring
 
 | HX711 pin | Pi GPIO |
 |---|---|
-| VCC  | 3.3 V (or 5 V) |
+| VCC  | 3.3 V (5 V also works) |
 | GND  | GND |
 | DOUT | GPIO 5 |
 | SCK  | GPIO 6 |
 
 ## Files
 
-| File | Purpose |
-|---|---|
-| `scale.py` | **Use this.** Raw GPIO implementation — reliable on Pi Zero. Handles calibration, tare, and continuous weight reads. |
-| `diagnose_hx711.py` | Diagnostic — checks wiring, DOUT pulse train, channel/gain bits. Run first if a new build isn't reading correctly. |
-| `debug_continuous.py` | Stripped-down continuous-read loop for troubleshooting drift / noise. |
-| `test_pigpio.py` | Attempt using `pigpio` for better edge timing — kept for reference. |
-| `test_raw_gpio.py` | Earlier raw-GPIO prototype that informed `scale.py`. |
-| `test_scale.py` | Wrapper around the `hx711py` library — flaky on Pi Zero, kept for comparison. |
-| `test_scale_v01.py` | Same but pinned to `hx711py` v0.1 for slightly different timing tolerance. |
-| `hx711py/` | Vendored copy of the upstream `hx711py` library (used only by the test scripts). |
+- `scale.py` — the working one. Raw GPIO, no library dependency. Tare + calibrate prompts on startup, then a continuous read loop.
+- `diagnose_hx711.py` — run this first on a new build. Checks DOUT idles high, that clock pulses get acknowledged, and which channel/gain the chip is configured for.
+- `debug_continuous.py` — bare-bones read loop. Useful when chasing noise or drift.
+- `test_pigpio.py` — same idea as `scale.py` but using the `pigpio` daemon for edge timing. Works on a Pi 3/4 but offered no improvement on the Pi Zero.
+- `test_raw_gpio.py` — earlier prototype, kept for reference.
+- `test_scale.py`, `test_scale_v01.py` — wrappers around the upstream `hx711py` library (current and pinned-to-v0.1). Both are flaky on the Zero.
+- `hx711py/` — vendored copy of the upstream library so the test scripts work without a pip install.
 
 ## Usage
 
@@ -30,8 +27,4 @@ HX711 + load-cell digital scale running on a Raspberry Pi (tested on Pi Zero). S
 python3 scale.py
 ```
 
-Follow the prompts to tare and calibrate with a known weight. The reported `SCALE` factor is reproducible across runs — set it as the default in the source once you have it.
-
-## Why so many scripts
-
-The HX711 protocol is timing-sensitive: clock pulses must be 0.2–50 µs wide. Linux schedulers on the Pi Zero produce jitter large enough to corrupt reads when using high-level libraries that use `sleep()`. Raw `GPIO.output()` calls without sleeps are tight enough to work consistently — that's what `scale.py` does.
+Tare, drop a known weight on, type the weight, and it'll save the calibration factor. After that it just streams grams.
