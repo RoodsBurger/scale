@@ -2,6 +2,8 @@
 
 A digital scale built around an HX711 load-cell amplifier and a Raspberry Pi Zero. The challenge was that the Pi Zero's scheduler isn't tight enough for the off-the-shelf `hx711py` library — reads come back corrupted because the clock pulses get stretched. Half the files here are me figuring that out; the one that actually works is `scale.py`, which talks to the HX711 with raw `GPIO.output()` calls and no `sleep()` between edges.
 
+This repo is maintained from raiserver.
+
 ## Wiring
 
 | HX711 pin | Pi GPIO |
